@@ -1,0 +1,13 @@
+__pycache__
+*.egg-info
+.cache
+.eggs
+.tox
+.vscode/
+*.pyc
+
+/.venv
+/dist
+/build
+/data
+/src/api/db/postgres-data
