@@ -1,6 +1,7 @@
 from typing import List, Dict
 from dataclasses import dataclass
 
+
 @dataclass
 class Price():
     priceHash: str
@@ -15,6 +16,7 @@ class Price():
     termPurchaseOption: str = ''
     termOfferingClass: str = ''
     description: str = ''
+
 
 @dataclass
 class Product():

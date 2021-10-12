@@ -4,6 +4,7 @@ from oauth2client.client import GoogleCredentials
 
 credentials = GoogleCredentials.get_application_default()
 
+
 def scrape():
     service = googleapiclient.discovery.build('compute', 'v1')
     projecy_id = 'semafor-321815'
@@ -15,4 +16,3 @@ def scrape():
 
         for machine_type in response['items']:
             print(machine_type)
-

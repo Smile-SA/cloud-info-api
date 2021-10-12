@@ -1,19 +1,20 @@
 import os
-from typing import *
+from typing import Any
 import requests
 import logging
 import json
 from dataclasses import dataclass
 
-from sqlalchemy.sql.expression import insert
 from api.db.query import insert_product
 from api.db.types import Price, Product
 from api.tools.hashing import generate_product_hash, generate_price_hash
 
 
-
-basePricingURL = 'https://prices.azure.com/api/retail/prices'
+# basePricingURL = 'https://prices.azure.com/api/retail/prices'
+basePricingURL = """https://prices.azure.com/api/retail/prices?$filter=serviceName eq \
+    'Virtual Machines' and armRegionName eq 'westeurope'"""
 logging.basicConfig(level=logging.INFO)
+
 
 @dataclass
 class ProductRaw():
@@ -37,7 +38,9 @@ class ProductRaw():
     type: str
     isPrimaryMeterRegion: bool
     armSkuName: str
+    effectiveEndDate: str = ''
     reservationTerm: str = ''
+
 
 @dataclass
 class Response():
@@ -60,7 +63,7 @@ def download_file():
             current_link = basePricingURL
 
         response = requests.get(current_link)
-        
+
         with open(f"data/azureretail-page-{page}.json", "wb") as handle:
             handle.write(response.content)
 
@@ -71,16 +74,18 @@ def download_file():
         if page % 100 == 0:
             logging.info(f'Downloaded {page} pages Azure Pricing API')
 
+
 def load_file():
-    logging.info(f'Loading Azure pricing...')
+    logging.info('Loading Azure pricing...')
     for filename in os.listdir('data'):
         if filename.startswith('azureretail-page-'):
             logging.info(f'Loading {filename}...')
             try:
-                process_file('data/'+filename)
+                process_file('data/' + filename)
             except Exception as e:
                 logging.error(f'Skipping {filename} due to {e}')
-    
+
+
 def process_file(fileName):
     logging.info(f'Processing {fileName}...')
 
@@ -90,6 +95,7 @@ def process_file(fileName):
     products = map(lambda x: mapped_product(ProductRaw(**x)), response.Items)
     file.close()
     insert_product(products)
+
 
 def mapped_product(product_raw: ProductRaw):
     product = Product(
@@ -117,6 +123,7 @@ def mapped_product(product_raw: ProductRaw):
 
     return product
 
+
 def mapped_price(product: Product, product_raw: ProductRaw):
     prices = []
 
@@ -125,7 +132,7 @@ def mapped_price(product: Product, product_raw: ProductRaw):
         instance_type = 'Spot'
     elif product_raw.skuName.endswith('Low Priority'):
         instance_type = 'Low Priority'
-    
+
     price = Price(
         priceHash='',
         purchaseOption=instance_type,
@@ -141,6 +148,3 @@ def mapped_price(product: Product, product_raw: ProductRaw):
     price.priceHash = generate_price_hash(product, price)
     prices.append(price)
     return prices
-
-
-
