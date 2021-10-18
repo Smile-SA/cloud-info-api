@@ -13,7 +13,7 @@ build-main:
   stage: build
   script:
   - *docker_login
-  - docker build -f docker/Dockerfile --pull -t "$CI_REGISTRY_IMAGE:latest" .
+  - docker build -f docker/build/Dockerfile --pull -t "$CI_REGISTRY_IMAGE:latest" .
   - docker push "$CI_REGISTRY_IMAGE"
   only:
     refs:
@@ -23,7 +23,7 @@ build:
   stage: build
   script:
   - *docker_login
-  - docker build -f docker/Dockerfile --pull -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME" .
+  - docker build -f docker/build/Dockerfile --pull -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME" .
   - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME"
   except:
     refs:

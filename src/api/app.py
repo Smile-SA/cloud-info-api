@@ -2,6 +2,7 @@ from flask import Flask
 
 from api.endpoints.events import api_routes
 from api.db.setup import setup_db
+from api.job import run_scheduler
 
 
 def initialize_app():
@@ -20,4 +21,5 @@ def create_app():
     """
     app = initialize_app()
     setup_db(app)
+    run_scheduler()
     return app

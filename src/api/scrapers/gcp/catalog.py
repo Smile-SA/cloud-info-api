@@ -1,6 +1,13 @@
 import requests
+import logging
+import json
+import os
 
-basePricingURL = 'https://cloudbilling.googleapis.com/v1'
+from api.db.types import Price, Product
+from api.tools.hashing import generate_price_hash, generate_product_hash
+
+base_url = 'https://cloudbilling.googleapis.com/v1'
+gcp_api_key = os.environ.get('GCP_API_KEY')
 
 
 class Sku(object):
@@ -16,14 +23,127 @@ class Sku(object):
         self.geoTaxonomy = geoTaxonomy
 
 
-def parse_product():
-    apiKey = 'AIzaSyDN4Eqx_AEME8GplWZnqTU-MuysvJH_d3Y'
-    sku = '6F81-5844-456A'
-    pricingWithKeyURL = f'{basePricingURL}/services/{sku}/skus?key={apiKey}'
-    response = requests.get(pricingWithKeyURL).json()
-    # for sku in response["skus"]:
-    skuPayload = response["skus"][0]
-    # print(skuPayload)
-    # skuPayload = json.loads(sku)
-    skuParsed = Sku(**skuPayload)
-    print(skuParsed.name)
+def get_service():
+    services = []
+    next_page_token = ''
+
+    # while next_page_token is not None:
+    next_page_params = ''
+    if next_page_token:
+        next_page_params = f'&pageToken={next_page_token}'
+
+    response = requests.get(f'{base_url}/services?key={gcp_api_key}{next_page_params}').json()
+    services = response['services']
+    next_page_token = response['nextPageToken']
+    return services
+
+
+def download():
+    services = get_service()
+    for service in services:
+        try:
+            if service['name'] == 'services/6F81-5844-456A':  # Only scrapping for VMs
+                download_service(service)
+        except Exception as e:
+            logging.error(f'Skipping due to {e}')
+
+
+def download_service(service):
+    logging.info(f'Downloading GCP {service["displayName"]} pricing...')
+    next_page_token = ''
+    page = 1
+
+    while True:
+        print(f'Downloading GCP serivce {service["displayName"]} page {page}')
+        next_page_params = ''
+        if next_page_token != '':
+            next_page_params = f'&pageToken={next_page_token}'
+
+        try:
+            response = requests.get(f'{base_url}/services/{service["serviceId"]}\
+                /skus?key={gcp_api_key}{next_page_params}')
+        except requests.exceptions.Timeout:
+            logging.info('Too many requests')
+        except requests.exceptions.TooManyRedirects:
+            pass
+        except requests.exceptions.RequestException as e:
+            logging.error('This is really bad, here we go: ', e)
+
+        file_name = f'gcp-{service["displayName"]}-{page}'
+        file_name = file_name.replace('/', '-')
+        file_name = file_name.replace('.', '-')
+
+        with open(f'data/{file_name}.json', 'wb') as handle:
+            handle.write(response.content)
+
+        response_json = response.json()
+        next_page_token = response_json['nextPageToken']
+        page += 1
+        if next_page_token == '':
+            break
+
+
+def process_file(file_name):
+    logging.info(f'Processing {file_name}...')
+
+    file = open(file_name,)
+    data = json.load(file)
+    skus = data['skus']
+    products = []
+
+    for sku in skus:
+        for region in sku['serviceRegions']:
+            product = mapped_product(sku, region)
+            products.append(product)
+
+    file.close()
+    # insert_product(products)
+
+
+def mapped_product(product_raw, region: str):
+    product = Product(
+        productHash='',
+        sku=product_raw['skuId'],
+        vendorName='gcp',
+        region=region,
+        service=product_raw['category']['serviceDisplayName'],
+        productFamily=product_raw['category']['resourceFamily'],
+        attributes={
+            'description': product_raw['description'],
+            'resourceGroup': product_raw['category']['resourceGroup'],
+        },
+        prices=[]
+    )
+    product.productHash = generate_product_hash(product)
+    product.prices = mapped_price(product, product_raw)
+
+    return product
+
+
+def mapped_price(product: Product, product_raw):
+    prices = []
+
+    for pricing in product_raw['pricingInfo']:
+        for i in range(0, len(pricing['pricingExpression']['tieredRates'])):
+            tier_rate = pricing['pricingExpression']['tieredRates'][i]
+
+            price = Price(
+                priceHash='',
+                purchaseOption=product_raw['category']['usageType'],
+                unit=pricing['pricingExpression']['usageUnitDescription'],
+                price=f'{tier_rate["unitPrice"]["units"]}.{tier_rate["unitPrice"]["nanos"]}',
+                effectiveDateStart=pricing['effectiveTime'],
+                startUsageAmount=tier_rate['startUsageAmount']
+            )
+
+            try:
+                next_tier = pricing['pricingExpression']['tieredRates'][i + 1]
+                price.endUsageAmount = next_tier['startUsageAmount']
+            except IndexError:
+                pass
+
+            price.priceHash = generate_price_hash(product, price)
+            print(price)
+            prices.append(price)
+
+    return prices

@@ -8,9 +8,10 @@ from dataclasses import dataclass
 from api.db.query import insert_product
 from api.db.types import Price, Product
 from api.tools.hashing import generate_product_hash, generate_price_hash
+from azure.mgmt.compute import ComputeManagementClient
+from azure.common.credentials import ServicePrincipalCredentials
 
 
-# basePricingURL = 'https://prices.azure.com/api/retail/prices'
 basePricingURL = """https://prices.azure.com/api/retail/prices?$filter=serviceName eq \
     'Virtual Machines' and armRegionName eq 'westeurope'"""
 logging.basicConfig(level=logging.INFO)
@@ -58,7 +59,7 @@ def download_file():
     page = 1
 
     while current_link is not None:
-        print(page)
+        logging.info(page)
         if current_link == '':
             current_link = basePricingURL
 
@@ -76,28 +77,62 @@ def download_file():
 
 
 def load_file():
+    logging.info('Loading Azure VM Size...')
+    vm_size_list = process_vm_size('data/size-azure-vms-westus.json')
+
     logging.info('Loading Azure pricing...')
     for filename in os.listdir('data'):
         if filename.startswith('azureretail-page-'):
             logging.info(f'Loading {filename}...')
             try:
-                process_file('data/' + filename)
+                process_file('data/' + filename, vm_size_list)
             except Exception as e:
                 logging.error(f'Skipping {filename} due to {e}')
 
 
-def process_file(fileName):
-    logging.info(f'Processing {fileName}...')
+def scrape_size():
+    region = 'westus'
 
-    file = open(fileName,)
+    def get_credentials():
+        subscription_id = os.environ.get('AZURE_SUBSCRIPTION_ID')
+        credentials = ServicePrincipalCredentials(
+            client_id=os.environ.get('AZURE_CLIENT_ID'),
+            secret=os.environ.get('AZURE_SECRET'),
+            tenant=os.environ.get('AZURE_TENANT'),
+        )
+        return credentials, subscription_id
+
+    credentials, subscription_id = get_credentials()
+    compute_client = ComputeManagementClient(credentials, subscription_id)
+    vm_size_list = [vm_size.serialize() for vm_size in
+                    compute_client.virtual_machine_sizes.list(location=region)]
+
+    with open(f'data/size-azure-vms-{region}.json', 'w') as handle:
+        json.dump(vm_size_list, handle)
+
+
+def process_vm_size(file_name):
+    logging.info(f'Processing VM Size {file_name}...')
+
+    file = open(file_name,)
+    data = json.load(file)
+    return data
+
+
+def process_file(file_name, vm_size_list):
+
+    logging.info(f'Processing {file_name}...')
+
+    file = open(file_name,)
     data = json.load(file)
     response = Response(**data)
-    products = map(lambda x: mapped_product(ProductRaw(**x)), response.Items)
+    products = map(lambda x: mapped_product(ProductRaw(**x), vm_size_list),
+                   response.Items)
     file.close()
     insert_product(products)
 
 
-def mapped_product(product_raw: ProductRaw):
+def mapped_product(product_raw: ProductRaw, vm_size_list):
     product = Product(
         productHash='',
         sku=product_raw.skuId,
@@ -118,6 +153,13 @@ def mapped_product(product_raw: ProductRaw):
         },
         prices=[]
     )
+
+    # Add vcpu and memory info to attributes
+    for vm in vm_size_list:
+        if product_raw.armSkuName == vm['name']:
+            product.attributes['vcpu'] = vm['numberOfCores']
+            product.attributes['memory'] = float(vm['memoryInMB']) / 1024
+
     product.productHash = generate_product_hash(product)
     product.prices = mapped_price(product, product_raw)
 

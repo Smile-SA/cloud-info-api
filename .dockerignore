@@ -6,6 +6,7 @@ __pycache__
 .vscode/
 *.pyc
 .gitignore
+.env
 
 docker-compose.yml
 README

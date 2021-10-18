@@ -5,9 +5,9 @@ __pycache__
 .tox
 .vscode/
 *.pyc
+.env
 
 /.venv
 /dist
 /build
 /data
-/src/api/db/postgres-data

@@ -43,8 +43,7 @@ def download_service(offer):
         response_json = response.json()
         for region in response_json['regions']:
             if region == 'eu-west-3':
-                region_response = requests.get(base_pricing_url +
-                                               response_json['regions']
+                region_response = requests.get(base_pricing_url + response_json['regions']
                                                [region]['currentVersionUrl'])
                 with open(f"data/aws-{offer['offerCode']}-{response_json['regions'][region]['regionCode']}.json",
                           "wb") as handle:
@@ -62,10 +61,10 @@ def load_file():
                 logging.error(f'Skipping {filename} due to {e}')
 
 
-def process_file(fileName):
-    logging.info(f'Processing {fileName}...')
+def process_file(file_name):
+    logging.info(f'Processing {file_name}...')
 
-    file = open(fileName,)
+    file = open(file_name,)
     data = json.load(file)
 
     products = map(lambda x: (mapped_product(data, ProductRaw(**x))),
