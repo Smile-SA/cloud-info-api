@@ -11,7 +11,7 @@ Download latest VMs prices from all providers. The prices will be stored in json
 ### Load latest prices
 **GET `/load`**
 
-Parse pricing files, map relevant informations and write it to the database
+Parse pricing files, map relevant information and write it to the database
 
 ### Query information
 **POST `/query`**
@@ -22,7 +22,7 @@ Parameters expected:
 - filter
 - purchase_option
 
-The parameter `purchase_option` can accept either these option:
+The parameter `purchase_option` can accept either these options:
 - OnDemand
 - Reserved
 - Spot

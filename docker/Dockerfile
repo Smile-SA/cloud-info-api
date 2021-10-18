@@ -9,7 +9,7 @@ RUN apk update \
     && pip3 install wheel
 
 COPY . /app
-COPY ./docker/build/entrypoint.sh /entrypoint.sh
+COPY ./docker/entrypoint.sh /entrypoint.sh
 
 WORKDIR /app
 
