@@ -35,6 +35,7 @@ def load():
 def download():
     try:
         retail.download_file()
+        retail.scrape_size()
         awsBulk.download_file()
         catalog.download_file()
         return make_response(jsonify("File downloaded successfully"), 200)

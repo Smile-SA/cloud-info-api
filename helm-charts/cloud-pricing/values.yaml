@@ -5,7 +5,7 @@
 image:
   repository: hub.rnd.alterway.fr/overboard/5gbiller/cloud-pricing-api
   pullPolicy: Always
-  tag: master
+  tag: latest
   
 imagePullSecrets:
   - name: access-token
