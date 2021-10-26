@@ -1,9 +1,10 @@
 import requests
-import logging
 import json
 import os
 
+from flask import current_app
 from api.db.types import Price, Product
+from api.db.query import insert_product
 from api.tools.hashing import generate_price_hash, generate_product_hash
 
 base_url = 'https://cloudbilling.googleapis.com/v1'
@@ -32,42 +33,42 @@ def get_service():
     if next_page_token:
         next_page_params = f'&pageToken={next_page_token}'
 
-    response = requests.get(f'{base_url}/services?key={gcp_api_key}{next_page_params}').json()
+    response = requests.get(
+        f'{base_url}/services?key={gcp_api_key}{next_page_params}').json()
     services = response['services']
     next_page_token = response['nextPageToken']
     return services
 
 
-def download():
+def download_file():
     services = get_service()
     for service in services:
         try:
             if service['name'] == 'services/6F81-5844-456A':  # Only scrapping for VMs
                 download_service(service)
         except Exception as e:
-            logging.error(f'Skipping due to {e}')
+            current_app.logger.error(f'Skipping due to {e}')
 
 
 def download_service(service):
-    logging.info(f'Downloading GCP {service["displayName"]} pricing...')
+    current_app.logger.info(f'Downloading GCP {service["displayName"]} pricing...')
     next_page_token = ''
     page = 1
 
     while True:
-        print(f'Downloading GCP serivce {service["displayName"]} page {page}')
+        current_app.logger.info(f'Downloading GCP serivce {service["displayName"]} page {page}')
         next_page_params = ''
         if next_page_token != '':
             next_page_params = f'&pageToken={next_page_token}'
 
         try:
-            response = requests.get(f'{base_url}/services/{service["serviceId"]}\
-                /skus?key={gcp_api_key}{next_page_params}')
+            response = requests.get(f'{base_url}/services/{service["serviceId"]}/skus?key={gcp_api_key}{next_page_params}')
         except requests.exceptions.Timeout:
-            logging.info('Too many requests')
+            current_app.logger.info('Too many requests')
         except requests.exceptions.TooManyRedirects:
             pass
         except requests.exceptions.RequestException as e:
-            logging.error('This is really bad, here we go: ', e)
+            current_app.logger.error('This is really bad, here we go: ', e)
 
         file_name = f'gcp-{service["displayName"]}-{page}'
         file_name = file_name.replace('/', '-')
@@ -84,7 +85,7 @@ def download_service(service):
 
 
 def process_file(file_name):
-    logging.info(f'Processing {file_name}...')
+    current_app.logger.info(f'Processing {file_name}...')
 
     file = open(file_name,)
     data = json.load(file)
@@ -97,7 +98,18 @@ def process_file(file_name):
             products.append(product)
 
     file.close()
-    # insert_product(products)
+    insert_product(products)
+
+
+def load_file():
+    current_app.logger.info('Loading GCP catalog...')
+    for filename in os.listdir('data'):
+        if filename.startswith('gcp-'):
+            current_app.logger.info(f'Loading {filename}...')
+            try:
+                process_file('data/' + filename)
+            except Exception as e:
+                current_app.logger.error(f'Skipping {filename} due to {e}')
 
 
 def mapped_product(product_raw, region: str):
@@ -131,7 +143,7 @@ def mapped_price(product: Product, product_raw):
                 priceHash='',
                 purchaseOption=product_raw['category']['usageType'],
                 unit=pricing['pricingExpression']['usageUnitDescription'],
-                price=f'{tier_rate["unitPrice"]["units"]}.{tier_rate["unitPrice"]["nanos"]}',
+                price=f'{tier_rate["unitPrice"]["units"]}.{tier_rate["unitPrice"]["nanos"]:09}',
                 effectiveDateStart=pricing['effectiveTime'],
                 startUsageAmount=tier_rate['startUsageAmount']
             )
@@ -143,7 +155,6 @@ def mapped_price(product: Product, product_raw):
                 pass
 
             price.priceHash = generate_price_hash(product, price)
-            print(price)
             prices.append(price)
 
     return prices

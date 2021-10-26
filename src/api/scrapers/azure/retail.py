@@ -1,20 +1,19 @@
 import os
 from typing import Any
 import requests
-import logging
 import json
 from dataclasses import dataclass
+from flask import current_app
 
 from api.db.query import insert_product
 from api.db.types import Price, Product
 from api.tools.hashing import generate_product_hash, generate_price_hash
 from azure.mgmt.compute import ComputeManagementClient
-from azure.common.credentials import ServicePrincipalCredentials
+from azure.identity import ClientSecretCredential
 
 
 basePricingURL = """https://prices.azure.com/api/retail/prices?$filter=serviceName eq \
     'Virtual Machines' and armRegionName eq 'westeurope'"""
-logging.basicConfig(level=logging.INFO)
 
 
 @dataclass
@@ -54,12 +53,12 @@ class Response():
 
 
 def download_file():
-    logging.info('Downloading Azure Pricing API...')
+    current_app.logger.info('Downloading Azure Pricing API...')
     current_link = ''
     page = 1
 
     while current_link is not None:
-        logging.info(page)
+        current_app.logger.info(page)
         if current_link == '':
             current_link = basePricingURL
 
@@ -73,21 +72,21 @@ def download_file():
         page += 1
 
         if page % 100 == 0:
-            logging.info(f'Downloaded {page} pages Azure Pricing API')
+            current_app.logger.info(f'Downloaded {page} pages Azure Pricing API')
 
 
 def load_file():
-    logging.info('Loading Azure VM Size...')
+    current_app.logger.info('Loading Azure VM Size...')
     vm_size_list = process_vm_size('data/size-azure-vms-westus.json')
 
-    logging.info('Loading Azure pricing...')
+    current_app.logger.info('Loading Azure pricing...')
     for filename in os.listdir('data'):
         if filename.startswith('azureretail-page-'):
-            logging.info(f'Loading {filename}...')
+            current_app.logger.info(f'Loading {filename}...')
             try:
                 process_file('data/' + filename, vm_size_list)
             except Exception as e:
-                logging.error(f'Skipping {filename} due to {e}')
+                current_app.logger.error(f'Skipping {filename} due to {e}')
 
 
 def scrape_size():
@@ -95,10 +94,10 @@ def scrape_size():
 
     def get_credentials():
         subscription_id = os.environ.get('AZURE_SUBSCRIPTION_ID')
-        credentials = ServicePrincipalCredentials(
+        credentials = ClientSecretCredential(
             client_id=os.environ.get('AZURE_CLIENT_ID'),
-            secret=os.environ.get('AZURE_SECRET'),
-            tenant=os.environ.get('AZURE_TENANT'),
+            client_secret=os.environ.get('AZURE_SECRET'),
+            tenant_id=os.environ.get('AZURE_TENANT'),
         )
         return credentials, subscription_id
 
@@ -112,7 +111,7 @@ def scrape_size():
 
 
 def process_vm_size(file_name):
-    logging.info(f'Processing VM Size {file_name}...')
+    current_app.logger.info(f'Processing VM Size {file_name}...')
 
     file = open(file_name,)
     data = json.load(file)
@@ -121,7 +120,7 @@ def process_vm_size(file_name):
 
 def process_file(file_name, vm_size_list):
 
-    logging.info(f'Processing {file_name}...')
+    current_app.logger.info(f'Processing {file_name}...')
 
     file = open(file_name,)
     data = json.load(file)

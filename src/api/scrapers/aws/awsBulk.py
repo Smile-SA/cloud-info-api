@@ -1,9 +1,9 @@
 import os
 import requests
-import logging
 import json
 from dataclasses import dataclass
 from typing import Any
+from flask import current_app
 
 from api.db.types import Price, Product
 from api.db.query import insert_product
@@ -29,7 +29,7 @@ index_url = '/offers/v1.0/aws/index.json'
 
 
 def download_file():
-    logging.info('Downloading AWS Pricing API...')
+    current_app.logger.info('Downloading AWS Pricing API...')
     response = requests.get(base_pricing_url + index_url)
 
     response_json = response.json()
@@ -51,18 +51,18 @@ def download_service(offer):
 
 
 def load_file():
-    logging.info('Loading AWS pricing...')
+    current_app.logger.info('Loading AWS pricing...')
     for filename in os.listdir('data'):
         if filename.startswith('aws-'):
-            logging.info(f'Loading {filename}...')
+            current_app.logger.info(f'Loading {filename}...')
             try:
                 process_file('data/' + filename)
             except Exception as e:
-                logging.error(f'Skipping {filename} due to {e}')
+                current_app.logger.error(f'Skipping {filename} due to {e}')
 
 
 def process_file(file_name):
-    logging.info(f'Processing {file_name}...')
+    current_app.logger.info(f'Processing {file_name}...')
 
     file = open(file_name,)
     data = json.load(file)

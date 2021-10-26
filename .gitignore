@@ -6,6 +6,7 @@ __pycache__
 .vscode/
 *.pyc
 .env
+env.sh
 
 /.venv
 /dist

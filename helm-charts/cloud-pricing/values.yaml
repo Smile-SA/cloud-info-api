@@ -3,10 +3,12 @@
 # Declare variables to be passed into your templates.
 
 image:
-  repository: cloud-pricing
+  repository: hub.rnd.alterway.fr/overboard/5gbiller/cloud-pricing-api
   pullPolicy: Always
-
-imagePullSecrets: []
+  tag: master
+  
+imagePullSecrets:
+  - name: access-token
 nameOverride: ""
 fullnameOverride: ""
 
@@ -52,6 +54,7 @@ api:
   replicaCount: 1
   disableTelemetry: false
   logLevel: info
+  envSecretName: cloud-pricing-secrets
 
 postgresql:
   # -- Deploy PostgreSQL servers. See [below](#postgresql) for more details
@@ -59,25 +62,31 @@ postgresql:
   # -- Use an existing secret with the PostgreSQL password
   existingSecret: ""
   # -- Have the secrets mounted as a file instead of env vars
-  usePasswordFile: false
+  # usePasswordFile: false
   # -- Name of the PostgreSQL database
-  postgresqlDatabase: cloudpricing
+  postgresqlDatabase: postgres
   # -- Name of the PostgreSQL user
-  postgresqlUsername: cloudpricing
+  postgresqlUsername: postgres
   # -- Details of external PostgreSQL server, such as AWS RDS, to use (assuming you've set postgresql.enabled to false)
   external: {}
+  # -- PostgresSQL password plain text
+  postgresqlPassword: postgres
+  # -- PostgresSQL PVC
+  persistence:
+    enabled: true
+    existingClaim: postgres-pvc
 
-resources: {}
+resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
 
 nodeSelector: {}
 

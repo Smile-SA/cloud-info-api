@@ -1,4 +1,16 @@
-import os
+class Config(object):
+    TESTING = False
 
-SQLALCHEMY_DATABASE_URI = os.environ('POSTGRES_DATABASE_URI')
-SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+class ProductionConfig(Config):
+    # SQLALCHEMY_DATABASE_URI = os.environ('POSTGRES_DATABASE_URI')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+
+class DevelopmentConfig(Config):
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+
+class TestingConfig(Config):
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    TESTING = True

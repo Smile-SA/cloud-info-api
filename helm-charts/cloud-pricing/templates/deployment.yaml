@@ -21,27 +21,40 @@ spec:
       serviceAccountName: {{ include "cloud-pricing.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+      - name: gcp-volume
+        secret:
+          secretName: gcp-key
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Chart.AppVersion }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: 80
+              containerPort: 5042
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /
+              path: /health
               port: http
           readinessProbe:
             httpGet:
-              path: /
-              port: http
+              path: /health
+              port: http     
+          env:
+            - name: POSTGRES_HOSTNAME
+              value: cloud-pricing-postgresql-headless
+          envFrom:
+          - secretRef:
+              name: cloud-pricing-secrets
+          volumeMounts:
+            - mountPath: /var/secrets/google/
+              name: gcp-volume
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- with .Values.nodeSelector }}
+      {{- with .Values.nodeSelector }}     
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}

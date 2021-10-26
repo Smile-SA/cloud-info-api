@@ -76,9 +76,9 @@ def find_product(other_filters, attributes_filters):
 
     cond_clause = ' AND '.join(where_list)
     query = tableClause + cond_clause
-    response = db.engine.execute(query)
+    responses = db.engine.execute(query)
     products = []
-    for response in response:
+    for response in responses:
         products.append(ProductWithPrice(**dict(response)))
     return products
 
@@ -90,6 +90,10 @@ def filter_condition(key, value):
     if value == '':
         return f"""("{key}" = '' OR {key} IS NULL)"""
 
+    # Contains substring case
+    if '%' in value:
+        return f""""{key}" LIKE '{value}'"""
+
     return f""""{key}" = '{value}'"""
 
 
@@ -97,5 +101,9 @@ def attribute_condition(filter):
     if filter["value"] == '':
         return f"(attributes -> {filter['key']} IS NULL OR attributes ->>\
             {filter['key']} = '')"
+
+    # Contains substring case
+    if '%' in filter["value"]:
+        return f"attributes ->> '{filter['key']}' LIKE '{filter['value']}'"
 
     return f"attributes ->> '{filter['key']}' = '{filter['value']}'"

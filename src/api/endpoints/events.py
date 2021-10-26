@@ -2,10 +2,11 @@ from flask import Blueprint, jsonify, make_response, request
 # from api.scrapers import aws
 from api.scrapers.azure import retail
 from api.scrapers.aws import awsBulk
+from api.scrapers.gcp import catalog, machine
 from api.db import setup
+from flask import current_app
 from api.db.query import find_product
 import json
-
 
 api_routes = Blueprint('api_routes', __name__)
 
@@ -22,8 +23,11 @@ def load():
         setup.create_table_product('pricing')
         retail.load_file()
         awsBulk.load_file()
+        catalog.load_file()
+        machine.load_machine()
         return make_response(jsonify("File loaded successfully"), 200)
-    except Exception:
+    except Exception as e:
+        current_app.logger.error(e)
         return make_response(jsonify("Loading files failed"), 400)
 
 
@@ -32,6 +36,7 @@ def download():
     try:
         retail.download_file()
         awsBulk.download_file()
+        catalog.download_file()
         return make_response(jsonify("File downloaded successfully"), 200)
     except Exception:
         return make_response(jsonify("Downloading files failed"), 400)
@@ -53,7 +58,10 @@ def query():
         ('aws', 'Spot'): 'spot',
         ('azure', 'OnDemand'): 'Consumption',
         ('azure', 'Reserved'): 'Reservation',
-        ('azure', 'Spot'): 'Spot'
+        ('azure', 'Spot'): 'Spot',
+        ('gcp', 'OnDemand'): 'on_demand',
+        ('gcp', 'Reserved'): 'reserved',
+        ('gcp', 'Spot'): 'preemptible',
     }[filter_parsed['vendorName'], purchase_option]
 
     for product in products:
@@ -66,7 +74,7 @@ def query():
             response = {}
             response['vcpu'] = vcpu
             response['memory'] = memory
-            response['price'] = lastest_price
+            response['price'] = lastest_price['price']
             responses.append(response)
 
     return make_response(jsonify(responses), 200)
