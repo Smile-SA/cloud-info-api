@@ -1,19 +1,22 @@
-import os
-from typing import Any
-import requests
 import json
+import os
 from dataclasses import dataclass
-from flask import current_app
+from typing import Any, List
+
 
 from api.db.query import insert_product
 from api.db.types import Price, Product
-from api.tools.hashing import generate_product_hash, generate_price_hash
-from azure.mgmt.compute import ComputeManagementClient
+from api.tools.hashing import generate_price_hash, generate_product_hash
+
 from azure.identity import ClientSecretCredential
+from azure.mgmt.compute import ComputeManagementClient
 
+from flask import current_app
 
-basePricingURL = """https://prices.azure.com/api/retail/prices?$filter=serviceName eq \
-    'Virtual Machines' and armRegionName eq 'westeurope'"""
+import requests
+
+base_pricing_url = "https://prices.azure.com/api/retail/prices?$filter=serviceName eq " \
+    "'Virtual Machines' and armRegionName eq 'westeurope'"
 
 
 @dataclass
@@ -53,6 +56,7 @@ class Response():
 
 
 def download_file():
+    """Download pricing information file from a provider API."""
     current_app.logger.info('Downloading Azure Pricing API...')
     current_link = ''
     page = 1
@@ -60,11 +64,11 @@ def download_file():
     while current_link is not None:
         current_app.logger.info(page)
         if current_link == '':
-            current_link = basePricingURL
+            current_link = base_pricing_url
 
         response = requests.get(current_link)
 
-        with open(f"data/azureretail-page-{page}.json", "wb") as handle:
+        with open(f'data/azureretail-page-{page}.json', 'wb') as handle:
             handle.write(response.content)
 
         next_page = response.json()['NextPageLink']
@@ -76,6 +80,7 @@ def download_file():
 
 
 def load_file():
+    """Iterate over downloaded files and process it."""
     current_app.logger.info('Loading Azure VM Size...')
     vm_size_list = process_vm_size('data/size-azure-vms-westus.json')
 
@@ -90,6 +95,7 @@ def load_file():
 
 
 def scrape_size():
+    """Query VMs instance specification."""
     region = 'westus'
 
     def get_credentials():
@@ -110,7 +116,14 @@ def scrape_size():
         json.dump(vm_size_list, handle)
 
 
-def process_vm_size(file_name):
+def process_vm_size(file_name: str) -> Any:
+    """
+    Extract VMs instance specification.
+
+    :file_name (str) File name
+
+    Return VMs specification object
+    """
     current_app.logger.info(f'Processing VM Size {file_name}...')
 
     file = open(file_name,)
@@ -118,7 +131,14 @@ def process_vm_size(file_name):
     return data
 
 
-def process_file(file_name, vm_size_list):
+def process_file(file_name: str, vm_size_list: List):
+    """
+    Extract product's information from a file and dump it into a database.
+
+    :file_name (str) File name
+    :vm_size_list (List) Array of VMs specification
+
+    """
 
     current_app.logger.info(f'Processing {file_name}...')
 
@@ -131,7 +151,15 @@ def process_file(file_name, vm_size_list):
     insert_product(products)
 
 
-def mapped_product(product_raw: ProductRaw, vm_size_list):
+def mapped_product(product_raw: ProductRaw, vm_size_list: List) -> Product:
+    """
+    Generate product properties based on the product raw information.
+
+    :product_raw (ProductRaw) Product Raw JSON information
+    :vm_size_list (List) Array of VMs specification
+
+    Return a mapped product
+    """
     product = Product(
         productHash='',
         sku=product_raw.skuId,
@@ -165,7 +193,15 @@ def mapped_product(product_raw: ProductRaw, vm_size_list):
     return product
 
 
-def mapped_price(product: Product, product_raw: ProductRaw):
+def mapped_price(product: Product, product_raw: ProductRaw) -> List:
+    """
+    Generate price properties based on the product.
+
+    :product (Product) Product object
+    :product_raw (Any) Product Raw JSON information
+
+    Return an array of mapped price object
+    """
     prices = []
 
     instance_type = product_raw.type

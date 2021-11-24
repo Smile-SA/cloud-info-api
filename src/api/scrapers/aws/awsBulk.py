@@ -1,13 +1,15 @@
-import os
-import requests
 import json
+import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, List
+
+from api.db.query import insert_product
+from api.db.types import Price, Product
+from api.tools.hashing import generate_price_hash, generate_product_hash
+
 from flask import current_app
 
-from api.db.types import Price, Product
-from api.db.query import insert_product
-from api.tools.hashing import generate_product_hash, generate_price_hash
+import requests
 
 
 @dataclass
@@ -29,6 +31,7 @@ index_url = '/offers/v1.0/aws/index.json'
 
 
 def download_file():
+    """Download pricing information file from a provider API."""
     current_app.logger.info('Downloading AWS Pricing API...')
     response = requests.get(base_pricing_url + index_url)
 
@@ -37,20 +40,24 @@ def download_file():
         download_service(response_json['offers'][offer])
 
 
-def download_service(offer):
+def download_service(offer: str):
+    """Download service information."""
     if offer['offerCode'] == 'AmazonEC2':
         response = requests.get(base_pricing_url + offer['currentRegionIndexUrl'])
         response_json = response.json()
         for region in response_json['regions']:
-            if region == 'eu-west-3':
-                region_response = requests.get(base_pricing_url + response_json['regions']
-                                               [region]['currentVersionUrl'])
-                with open(f"data/aws-{offer['offerCode']}-{response_json['regions'][region]['regionCode']}.json",
-                          "wb") as handle:
-                    handle.write(region_response.content)
+            current_app.logger.info(f'Download service from the region '
+                                    f'{response_json["regions"][region]["regionCode"]}..')
+            region_response = requests.get(base_pricing_url + response_json['regions']
+                                           [region]['currentVersionUrl'])
+            with open(f'data/aws-{offer["offerCode"]}-'
+                      f'{response_json["regions"][region]["regionCode"]}'
+                      f'.json', 'wb') as handle:
+                handle.write(region_response.content)
 
 
 def load_file():
+    """Iterate over downloaded files and process it."""
     current_app.logger.info('Loading AWS pricing...')
     for filename in os.listdir('data'):
         if filename.startswith('aws-'):
@@ -61,7 +68,12 @@ def load_file():
                 current_app.logger.error(f'Skipping {filename} due to {e}')
 
 
-def process_file(file_name):
+def process_file(file_name: str):
+    """
+    Extract product's information from a file and dump it into a database.
+
+    :file_name (str) File name
+    """
     current_app.logger.info(f'Processing {file_name}...')
 
     file = open(file_name,)
@@ -73,25 +85,36 @@ def process_file(file_name):
     insert_product(products)
 
 
-def mapped_product(data, product_raw: ProductRaw):
+def mapped_product(data: Any, product_raw: ProductRaw) -> Product:
+    """
+    Generate product properties based on the product raw information.
+
+    :product_raw (ProductRaw) Product Raw JSON information
+    :data (Any) JSON response
+
+    Return a mapped product
+    """
     product = Product(
         productHash='',
         vendorName='aws',
         service=product_raw.attributes['servicecode'],
         productFamily=product_raw.productFamily,
-        region=product_raw.attributes['location'],
+        region=product_raw.attributes['location']
+        if 'location' in product_raw.attributes else None,
         sku=product_raw.sku,
         attributes=product_raw.attributes,
         prices=[]
     )
     product.productHash = generate_product_hash(product)
 
-    if data['terms']['OnDemand'] and product.sku in data['terms']['OnDemand']:
+    # print(data['terms'].keys())
+
+    if 'OnDemand' in data['terms'] and product.sku in data['terms']['OnDemand']:
         product.prices = mapped_price(product,
                                       data['terms']['OnDemand'][product.sku],
                                       'on_demand')
 
-    if data['terms']['Reserved'] and product.sku in data['terms']['Reserved']:
+    if 'Reserved' in data['terms'] and product.sku in data['terms']['Reserved']:
         product.prices = mapped_price(product,
                                       data['terms']['Reserved'][product.sku],
                                       'reserved')
@@ -99,7 +122,16 @@ def mapped_product(data, product_raw: ProductRaw):
     return product
 
 
-def mapped_price(product: Product, price_raw, purchase_option: str):
+def mapped_price(product: Product, price_raw: Any, purchase_option: str) -> List:
+    """
+    Generate price properties based on the product and the purchase option.
+
+    :product (Product) Product object
+    :price_raw (Any) Price object of a product
+    :purchase_option (str) Purchase option
+
+    Return an array of mapped price object
+    """
     prices = []
     for price_item in price_raw.values():
         for price_dimension in price_item['priceDimensions'].values():
@@ -114,7 +146,7 @@ def mapped_price(product: Product, price_raw, purchase_option: str):
                 endUsageAmount=price_dimension['endRange']
                 if 'endRange' in price_dimension else '',
                 description=price_dimension['description'],
-                price=price_dimension['pricePerUnit']['USD']
+                price=float(price_dimension['pricePerUnit']['USD'])
             )
 
             if purchase_option == 'reserved':

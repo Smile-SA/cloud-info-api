@@ -1,12 +1,12 @@
 all: venv install
 
 venv:
-	python3 -m venv .venv
+	python3.9 -m venv .venv
 
 .PHONY: install
 install: venv
 	./.venv/bin/pip install -U pip wheel
-	./.venv/bin/pip install -e .
+	./.venv/bin/pip install -e .[dev]
 
 .PHONY: clean
 clean:

@@ -1,7 +1,9 @@
-from apscheduler.schedulers.background import BackgroundScheduler
-import requests
-from api.scrapers.azure import retail
 from api.scrapers.aws import awsBulk
+from api.scrapers.azure import retail
+
+from apscheduler.schedulers.background import BackgroundScheduler
+
+import requests
 
 
 def heartbeat():

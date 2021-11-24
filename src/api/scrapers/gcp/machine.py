@@ -1,10 +1,14 @@
-import googleapiclient.discovery
+from typing import Any
+
+from api.db.query import find_product, insert_product
+from api.db.types import Price, Product
+from api.tools.hashing import generate_price_hash, generate_product_hash
 
 from flask import current_app
+
+import googleapiclient.discovery
+
 from oauth2client.client import GoogleCredentials
-from api.db.types import Product, Price
-from api.db.query import find_product, insert_product
-from api.tools.hashing import generate_product_hash, generate_price_hash
 
 credentials = GoogleCredentials.get_application_default()
 
@@ -53,8 +57,38 @@ machine_type_override = {
     'e2-medium': {'cpu': 1}
 }
 
+check_list_region = [
+    'asia-east1',
+    'asia-east2',
+    'asia-northeast1',
+    'asia-northeast2',
+    'asia-northeast3',
+    'asia-south1',
+    'asia-south2',
+    'asia-southeast1',
+    'asia-southeast2',
+    'australia-southeast1',
+    'australia-southeast2',
+    'europe-central2',
+    'europe-north1',
+    'europe-west1',
+    'europe-west2',
+    'europe-west3',
+    'europe-west4',
+    'europe-west6',
+    'northamerica-northeast1',
+    'northamerica-northeast2',
+    'southamerica-east1',
+    'us-east4',
+    'us-west1',
+    'us-west2',
+    'us-west3',
+    'us-west4'
+]
+
 
 def load_machine():
+    """Add machines and dump into the database."""
     service = googleapiclient.discovery.build('compute', 'v1', credentials=credentials)
     project_id = 'semafor-321815'
 
@@ -71,7 +105,7 @@ def load_machine():
             region_name = region['name']
             region_zones = list(map(lambda x: filter_zone(region_name, x),
                                 region['zones']))
-            if region_zones[0] == 'europe-west3-c':
+            if region_zones[0][:-2] in check_list_region:
                 machine_types_req = service.machineTypes().list(project=project_id,
                                                                 zone=region_zones[0])
                 while machine_types_req is not None:
@@ -79,8 +113,8 @@ def load_machine():
 
                     for machine_type in machine_types_resp['items']:
                         machine_name = machine_type['name']
-                        current_app.logger.info(f'Adding machine type {machine_name} \
-                            for region {region_name}...')
+                        current_app.logger.info(f'Adding machine type {machine_name} '
+                                                f'for region {region_name}...')
 
                         product = Product(
                             productHash='',
@@ -96,25 +130,48 @@ def load_machine():
                         )
 
                         product.productHash = generate_product_hash(product)
-                        on_demand_price = create_price(product, machine_type, 'on_demand')
-                        preemptible_price = create_price(product, machine_type, 'preemptible')
+                        on_demand_price = create_price(
+                            product,
+                            machine_type,
+                            'on_demand'
+                        )
+                        preemptible_price = create_price(
+                            product, machine_type,
+                            'preemptible'
+                        )
                         if on_demand_price:
                             product.prices.append(on_demand_price)
                         if preemptible_price:
                             product.prices.append(preemptible_price)
                         products.append(product)
 
-                    machine_types_req = service.machineTypes().list_next(previous_request=machine_types_req, previous_response=machine_types_resp)
-        region_req = service.regions().list_next(previous_request=region_req, previous_response=region_resp)
+                    machine_types_req = service.machineTypes().list_next(
+                        previous_request=machine_types_req,
+                        previous_response=machine_types_resp
+                    )
+        region_req = service.regions().list_next(
+            previous_request=region_req,
+            previous_response=region_resp
+        )
     insert_product(products)
 
 
-def create_price(product, machine_type, purchase_option):
+def create_price(product: Product, machine_type: str, purchase_option: str) -> Price:
+    """
+    Generate VM price.
+
+    :product (Product) Product object
+    :machine_type (str) Machine type
+    :purchase_option (str) Purchase option
+
+    Return the product price
+    """
     machine_name = machine_type['name']
     machine_family = machine_name.split('-')[0]
 
     if machine_family not in machine_type_lookup:
-        current_app.logger.warn('Description does not exist for machine type {machine_name}')
+        current_app.logger.warn(f'Description does not exist for machine type '
+                                f'{machine_name}')
         return None
 
     if 'total' in machine_type_lookup[machine_family]:
@@ -138,7 +195,17 @@ def create_price(product, machine_type, purchase_option):
     return price
 
 
-def generate_price_total(product, machine_type, purchase_option):
+def generate_price_total(product: Product,
+                         machine_type: str, purchase_option: str) -> Any:
+    """
+    Generate VM price based total information.
+
+    :product (Product) Product object
+    :machine_type (str) Machine type
+    :purchase_option (str) Purchase option
+
+    Return a dict including price and specfication
+    """
     machine_type_name = machine_type['name']
     machine_family = machine_type_name.split('-')[0]
 
@@ -150,8 +217,8 @@ def generate_price_total(product, machine_type, purchase_option):
     matched_vm = find_compute(product.region, description)
 
     if not matched_vm:
-        current_app.logger.warn(f'No matching found for VM type {machine_type_name} \
-            by purchase {purchase_option}')
+        current_app.logger.warn(f'No matching found for VM type {machine_type_name} '
+                                f'by purchase {purchase_option}')
         return None
 
     matched_price = matched_vm.prices[list(matched_vm.prices)[0]][0]
@@ -160,7 +227,17 @@ def generate_price_total(product, machine_type, purchase_option):
     return {'price': price, 'effectiveDateStart': effective_datestart}
 
 
-def generate_price_cpu_memory(product, machine_type, purchase_option):
+def generate_price_cpu_memory(product: Product,
+                              machine_type: str, purchase_option: str) -> Any:
+    """
+    Generate VM price based on CPU and RAM information.
+
+    :product (Product) Product object
+    :machine_type (str) Machine type
+    :purchase_option (str) Purchase option
+
+    Return a dict including price and specfication
+    """
     machine_type_name = machine_type['name']
     machine_family = machine_type_name.split('-')[0]
 
@@ -175,13 +252,13 @@ def generate_price_cpu_memory(product, machine_type, purchase_option):
     matched_mem_vm = find_compute(product.region, mem_desc)
 
     if not matched_cpu_vm:
-        current_app.logger.warn(f'No matching found for VM CPU type {matched_cpu_vm} \
-         by purchase {purchase_option}')
+        current_app.logger.warn(f'No matching found for VM CPU type {matched_cpu_vm} '
+                                f'by purchase {purchase_option}')
         return None
 
     if not matched_mem_vm:
-        current_app.logger.warn(f'No matching found for VM Memory type {matched_mem_vm} \
-            by purchase {purchase_option}')
+        current_app.logger.warn(f'No matching found for VM Memory type {matched_mem_vm} '
+                                f'by purchase {purchase_option}')
         return None
 
     cpu = float(machine_type['guestCpus'])
@@ -204,7 +281,15 @@ def generate_price_cpu_memory(product, machine_type, purchase_option):
     }
 
 
-def find_compute(region, description):
+def find_compute(region: str, description: str) -> Any:
+    """
+    Search for matching VM.
+
+    :region (str) Region name
+    :description (str) VM's description
+
+    Return matching VM
+    """
     filter = {
         'vendorName': 'gcp',
         'service': 'Compute Engine',

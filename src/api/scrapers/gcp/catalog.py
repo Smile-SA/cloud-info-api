@@ -1,11 +1,14 @@
-import requests
 import json
 import os
+from typing import Any, List
+
+from api.db.query import insert_product
+from api.db.types import Price, Product
+from api.tools.hashing import generate_price_hash, generate_product_hash
 
 from flask import current_app
-from api.db.types import Price, Product
-from api.db.query import insert_product
-from api.tools.hashing import generate_price_hash, generate_product_hash
+
+import requests
 
 base_url = 'https://cloudbilling.googleapis.com/v1'
 gcp_api_key = os.environ.get('GCP_API_KEY')
@@ -24,7 +27,8 @@ class Sku(object):
         self.geoTaxonomy = geoTaxonomy
 
 
-def get_service():
+def get_service() -> List:
+    """Query service information."""
     services = []
     next_page_token = ''
 
@@ -41,6 +45,7 @@ def get_service():
 
 
 def download_file():
+    """Download pricing information file from a provider API."""
     services = get_service()
     for service in services:
         try:
@@ -50,19 +55,26 @@ def download_file():
             current_app.logger.error(f'Skipping due to {e}')
 
 
-def download_service(service):
+def download_service(service: Any):
+    """
+    Download service information.
+
+    :service (Any) Service name
+    """
     current_app.logger.info(f'Downloading GCP {service["displayName"]} pricing...')
     next_page_token = ''
     page = 1
 
     while True:
-        current_app.logger.info(f'Downloading GCP serivce {service["displayName"]} page {page}')
+        current_app.logger.info(f'Downloading GCP serivce '
+                                f'{service["displayName"]} page {page}')
         next_page_params = ''
         if next_page_token != '':
             next_page_params = f'&pageToken={next_page_token}'
 
         try:
-            response = requests.get(f'{base_url}/services/{service["serviceId"]}/skus?key={gcp_api_key}{next_page_params}')
+            response = requests.get(f'{base_url}/services/{service["serviceId"]}'
+                                    f'/skus?key={gcp_api_key}{next_page_params}')
         except requests.exceptions.Timeout:
             current_app.logger.info('Too many requests')
         except requests.exceptions.TooManyRedirects:
@@ -84,7 +96,12 @@ def download_service(service):
             break
 
 
-def process_file(file_name):
+def process_file(file_name: str):
+    """
+    Extract product's information from a file and dump it into a database.
+
+    :file_name (str) File name
+    """
     current_app.logger.info(f'Processing {file_name}...')
 
     file = open(file_name,)
@@ -102,6 +119,7 @@ def process_file(file_name):
 
 
 def load_file():
+    """Iterate over downloaded files and process it."""
     current_app.logger.info('Loading GCP catalog...')
     for filename in os.listdir('data'):
         if filename.startswith('gcp-'):
@@ -112,7 +130,15 @@ def load_file():
                 current_app.logger.error(f'Skipping {filename} due to {e}')
 
 
-def mapped_product(product_raw, region: str):
+def mapped_product(product_raw: Any, region: str) -> Product:
+    """
+    Generate product properties based on the product raw information.
+
+    :product_raw (Any) Product Raw JSON information
+    :region (str) Product's region
+
+    Return a mapped product
+    """
     product = Product(
         productHash='',
         sku=product_raw['skuId'],
@@ -132,7 +158,15 @@ def mapped_product(product_raw, region: str):
     return product
 
 
-def mapped_price(product: Product, product_raw):
+def mapped_price(product: Product, product_raw: Any) -> List:
+    """
+    Generate price properties based on the product.
+
+    :product (Product) Product object
+    :product_raw (Any) Product Raw JSON information
+
+    Return an array of mapped price object
+    """
     prices = []
 
     for pricing in product_raw['pricingInfo']:
@@ -143,7 +177,8 @@ def mapped_price(product: Product, product_raw):
                 priceHash='',
                 purchaseOption=product_raw['category']['usageType'],
                 unit=pricing['pricingExpression']['usageUnitDescription'],
-                price=f'{tier_rate["unitPrice"]["units"]}.{tier_rate["unitPrice"]["nanos"]:09}',
+                price=f'{tier_rate["unitPrice"]["units"]}'
+                      f'.{tier_rate["unitPrice"]["nanos"]:09}',
                 effectiveDateStart=pricing['effectiveTime'],
                 startUsageAmount=tier_rate['startUsageAmount']
             )

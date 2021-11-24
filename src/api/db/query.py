@@ -1,10 +1,11 @@
-from dataclasses import dataclass
-import sqlalchemy as sa
 import json
+from dataclasses import dataclass
+from typing import Any, Dict, List
 
-from api.db.types import Price, Product
 from api.db.setup import db
-from typing import List, Dict
+from api.db.types import Price, Product
+
+import sqlalchemy as sa
 
 
 @dataclass
@@ -20,6 +21,12 @@ class ProductWithPrice():
 
 
 def insert_product(products: List[Product]):
+    """
+    Add or update a product to the database.
+
+    :products (List[Product]) Array of products
+
+    """
     insert_clause = sa.text("""
         INSERT INTO pricing ("productHash", "sku", "vendorName", "region", "service",
         "productFamily", "attributes", "prices") VALUES
@@ -35,21 +42,17 @@ def insert_product(products: List[Product]):
         "prices" = pricing.prices || excluded.prices
     """)
 
-    # table_name = 'pricing'
     for product in products:
 
-        pricesMap = {}
+        prices_map = {}
 
         for price in product.prices:
-            if price.priceHash in pricesMap.keys():
-                pricesMap[price.priceHash].append(price.__dict__)
+            if price.priceHash in prices_map.keys():
+                prices_map[price.priceHash].append(price.__dict__)
             else:
-                pricesMap[price.priceHash] = [price.__dict__]
-
-        # print(json.dumps(product.attributes))
+                prices_map[price.priceHash] = [price.__dict__]
 
         params = {
-            # 'table_name': table_name,
             'productHash': product.productHash,
             'sku': product.sku,
             'vendorName': product.vendorName,
@@ -57,15 +60,24 @@ def insert_product(products: List[Product]):
             'service': product.service,
             'productFamily': product.productFamily,
             'attributes': json.dumps(product.attributes),
-            'prices': json.dumps(pricesMap),
+            'prices': json.dumps(prices_map),
         }
 
         db.engine.execute(insert_clause.params(**params))
 
 
-def find_product(other_filters, attributes_filters):
+def find_product(other_filters: List, attributes_filters: List) -> List:
+    """
+    Find corresponding products by filters using a SQL query.
+
+    :other_filters (List) Array of a filter of any field
+    :attributes_filters (List) Array of a filter of the attributes field
+
+    Return an array of matching products
+
+    """
     table = 'pricing'
-    tableClause = f'SELECT * FROM {table} WHERE '
+    table_clause = f'SELECT * FROM {table} WHERE '
     where_list = []
 
     for key in other_filters:
@@ -75,7 +87,7 @@ def find_product(other_filters, attributes_filters):
         where_list.append(attribute_condition(filter))
 
     cond_clause = ' AND '.join(where_list)
-    query = tableClause + cond_clause
+    query = table_clause + cond_clause
     responses = db.engine.execute(query)
     products = []
     for response in responses:
@@ -83,7 +95,15 @@ def find_product(other_filters, attributes_filters):
     return products
 
 
-def filter_condition(key, value):
+def filter_condition(key: str, value: Any) -> str:
+    """
+    Convert filters into a SQL syntax.
+
+    :key (str) Name of the condition
+    :value (Any) Value of the condition, can be either a single value or a list
+
+    Return a SQL string
+    """
     if isinstance(value, list):
         return f""""{key}" IN ({value})"""
 
@@ -97,13 +117,20 @@ def filter_condition(key, value):
     return f""""{key}" = '{value}'"""
 
 
-def attribute_condition(filter):
-    if filter["value"] == '':
+def attribute_condition(filter: Any) -> str:
+    """
+    Convert filters into a SQL syntax.
+
+    :filter (str) Array of filters
+
+    Return a SQL string
+    """
+    if filter['value'] == '':
         return f"(attributes -> {filter['key']} IS NULL OR attributes ->>\
             {filter['key']} = '')"
 
     # Contains substring case
-    if '%' in filter["value"]:
+    if '%' in filter['value']:
         return f"attributes ->> '{filter['key']}' LIKE '{filter['value']}'"
 
     return f"attributes ->> '{filter['key']}' = '{filter['value']}'"
