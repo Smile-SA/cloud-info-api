@@ -5,7 +5,7 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
-    image: hub.rnd.alterway.fr/overboard/5gbiller/cloud-pricing-api:latest # Latest stable release
+    image: hub.rnd.alterway.fr/overboard/5gbiller/cloud-info-api:latest # Latest stable release
     ports: 
         - 5042:5042
     environment:
@@ -41,10 +41,10 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data/
     networks:
-      - cloud-pricing-api
+      - cloud-info-api
  
 volumes:
   postgres-data:
 
 networks:
-  cloud-pricing-api:
+  cloud-info-api:

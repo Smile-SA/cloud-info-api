@@ -1,4 +1,4 @@
-# Cloud Pricing API
+# Cloud Info API
 
 The API provides public prices for the virtual machine service available from AWS, Azure and GCP. The database of prices is automatically updated monthly via a scheduled job.
 

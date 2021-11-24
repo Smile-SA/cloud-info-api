@@ -3,7 +3,14 @@ import hashlib
 from api.db.types import Price, Product
 
 
-def generate_product_hash(product: Product):
+def generate_product_hash(product: Product) -> str:
+    """
+    Generate a hashed string based on product informations.
+
+    :product (Product) Product object
+
+    Return a hashed string
+    """
     hash_field = ['vendorName', 'sku']
 
     hash_values = []
@@ -16,8 +23,22 @@ def generate_product_hash(product: Product):
     return hash_str
 
 
-def generate_price_hash(product: Product, price: Price):
-    hash_field = ['purchaseOption', 'unit', 'termLength', 'termPurchaseOption', 'termOfferingClass']
+def generate_price_hash(product: Product, price: Price) -> str:
+    """
+    Generate a hashed string based on product price informations.
+
+    :product (Product) Product object
+    :price (Price) Product price object
+
+    Return a hashed string
+    """
+    hash_field = [
+        'purchaseOption',
+        'unit',
+        'termLength',
+        'termPurchaseOption',
+        'termOfferingClass'
+    ]
 
     hash_values = []
     for field in hash_field:

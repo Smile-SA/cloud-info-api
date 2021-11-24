@@ -7,10 +7,20 @@ services:
   echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
 
 stages:
+- test
 - build
+
+test-env:
+  stage: test
+  image: python:3.9-alpine
+  script:
+  - apk --update --no-cache add python3 python3-dev py-pip build-base libffi-dev postgresql-dev
+  - pip install wheel tox
+  - tox  
 
 build-main:
   stage: build
+  image: python:3.9-alpine
   script:
   - *docker_login
   - docker build -f docker/Dockerfile --pull -t "$CI_REGISTRY_IMAGE:latest" .
