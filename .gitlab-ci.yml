@@ -20,7 +20,6 @@ test-env:
 
 build-main:
   stage: build
-  image: python:3.9-alpine
   script:
   - *docker_login
   - docker build -f docker/Dockerfile --pull -t "$CI_REGISTRY_IMAGE:latest" .
